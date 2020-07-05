@@ -1,54 +1,80 @@
 #ifndef BIG_INTEGER_H
 #define BIG_INTEGER_H
 
-#include <cstddef>
-#include <gmp.h>
-#include <iosfwd>
+#include <string>
+#include <cstdint>
+#include <vector>
+#include <functional>
 
 struct big_integer
 {
-    big_integer();
-    big_integer(big_integer const& other);
-    big_integer(int a);
-    explicit big_integer(std::string const& str);
-    ~big_integer();
+  typedef uint32_t limb_t;
+  typedef uint64_t dlimb_t;
 
-    big_integer& operator=(big_integer const& other);
+  big_integer();
+  big_integer(big_integer const& other);
+  big_integer(int a);
+  explicit big_integer(std::string const& str);
+  ~big_integer();
 
-    big_integer& operator+=(big_integer const& rhs);
-    big_integer& operator-=(big_integer const& rhs);
-    big_integer& operator*=(big_integer const& rhs);
-    big_integer& operator/=(big_integer const& rhs);
-    big_integer& operator%=(big_integer const& rhs);
+  big_integer& operator=(big_integer const& other);
 
-    big_integer& operator&=(big_integer const& rhs);
-    big_integer& operator|=(big_integer const& rhs);
-    big_integer& operator^=(big_integer const& rhs);
+  big_integer& operator+=(big_integer const& rhs);
+  big_integer& operator-=(big_integer const& rhs);
+  big_integer& operator*=(big_integer const& rhs);
+  big_integer& operator/=(big_integer const& rhs);
+  big_integer& operator%=(big_integer const& rhs);
 
-    big_integer& operator<<=(int rhs);
-    big_integer& operator>>=(int rhs);
+  big_integer& operator&=(big_integer const& rhs);
+  big_integer& operator|=(big_integer const& rhs);
+  big_integer& operator^=(big_integer const& rhs);
 
-    big_integer operator+() const;
-    big_integer operator-() const;
-    big_integer operator~() const;
+  big_integer& operator<<=(int rhs);
+  big_integer& operator>>=(int rhs);
 
-    big_integer& operator++();
-    big_integer operator++(int);
+  big_integer operator+() const;
+  big_integer operator-() const;
+  big_integer operator~() const;
 
-    big_integer& operator--();
-    big_integer operator--(int);
+  big_integer& operator++();
+  big_integer operator++(int);
 
-    friend bool operator==(big_integer const& a, big_integer const& b);
-    friend bool operator!=(big_integer const& a, big_integer const& b);
-    friend bool operator<(big_integer const& a, big_integer const& b);
-    friend bool operator>(big_integer const& a, big_integer const& b);
-    friend bool operator<=(big_integer const& a, big_integer const& b);
-    friend bool operator>=(big_integer const& a, big_integer const& b);
+  big_integer& operator--();
+  big_integer operator--(int);
 
-    friend std::string to_string(big_integer const& a);
+  friend bool operator==(big_integer const& a, big_integer const& b);
+  friend bool operator!=(big_integer const& a, big_integer const& b);
+  friend bool operator<(big_integer const& a, big_integer const& b);
+  friend bool operator>(big_integer const& a, big_integer const& b);
+  friend bool operator<=(big_integer const& a, big_integer const& b);
+  friend bool operator>=(big_integer const& a, big_integer const& b);
+  friend std::string to_string(big_integer const& a);
 
 private:
-    mpz_t mpz;
+  big_integer(limb_t a);
+  size_t len() const ;
+  limb_t rest_bits() const;
+  bool is_negative() const;
+  bool is_zero() const;
+  void new_buffer(size_t new_size);
+
+  // division and multiplication
+  void normalize();
+  void mul_short(limb_t short_factor);
+  big_integer prefix(size_t len);
+  void add_on_pref(big_integer const &rhs, size_t at);
+  void assign_pref(big_integer const &rhs);
+  friend limb_t get_approx(big_integer a, big_integer b);
+
+  // comparison
+  int compare_lexicographically(big_integer const &rhs, limb_t fill_value = 0) const;
+  int compare_numerically(big_integer const &rhs) const;
+
+  // bitwise operations
+  big_integer& bit_operation(big_integer const &rhs, std::function<limb_t(limb_t, limb_t)> f);
+  big_integer& negate();
+private:
+  std::vector<limb_t> data_;
 };
 
 big_integer operator+(big_integer a, big_integer const& b);
