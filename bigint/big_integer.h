@@ -61,14 +61,13 @@ private:
   // division and multiplication
   void normalize();
   void mul_short(limb_t short_factor);
-  big_integer prefix(size_t len);
+  big_integer& prefix(size_t len, big_integer &ans);
   void add_on_pref(big_integer const &rhs, size_t at);
   void assign_pref(big_integer const &rhs);
-  friend limb_t get_approx(big_integer a, big_integer b);
+  friend limb_t get_approx(big_integer const &a, big_integer const &b);
 
   // comparison
   int compare_lexicographically(big_integer const &rhs, limb_t fill_value = 0) const;
-  int compare_numerically(big_integer const &rhs) const;
 
   // bitwise operations
   big_integer& bit_operation(big_integer const &rhs, std::function<limb_t(limb_t, limb_t)> f);

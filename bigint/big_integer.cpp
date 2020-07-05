@@ -126,9 +126,10 @@ big_integer::big_integer(std::string const& str)
         "invalid string for big_integer constructor: " + str);
   data_.push_back(0);
   for (size_t i = sign ? 1 : 0; i < str.size(); i += DECIMAL_DIGIT_LEN) {
-    *this *= MOD;
-    if (str.size() - i < DECIMAL_DIGIT_LEN) {
-      *this /= std::stoi("1" + std::string(DECIMAL_DIGIT_LEN - (str.size() - i), '0'));
+    if (str.size() - i >= DECIMAL_DIGIT_LEN) {
+      *this *= MOD;
+    } else {
+      *this *= std::stoi("1" + std::string(str.size() - i, '0'));
     }
     *this += std::stoi(str.substr(i, DECIMAL_DIGIT_LEN));
   }
@@ -224,7 +225,7 @@ namespace {
 }
 
 // source: www.youtube.com/channel/UCzymTLlAXdcgRn6yLcpow0Q
-limb_t get_approx(big_integer a, big_integer b) {
+limb_t get_approx(big_integer const &a, big_integer const &b) {
   limb_t u2 = a.data_[2], u1 = a.data_[1], u0 = a.data_[0];
   limb_t d1 = b.data_[1], d0 = b.data_[0];
   dlimb_t U = glue(u2, u1);
@@ -257,9 +258,8 @@ void big_integer::mul_short(limb_t short_factor) {  // slightly faster version o
   }
 }
 
-big_integer big_integer::prefix(size_t pref_len) {
-  big_integer ans;
-  ans.new_buffer(pref_len);  // excess will be filled with 0-s
+big_integer& big_integer::prefix(size_t pref_len, big_integer &ans) {
+  ans.new_buffer(pref_len);
   for (size_t i = 0; i < pref_len; i++) {
     ans.data_[i] = len() < pref_len - i ? 0 : data_[len() - pref_len + i];
   }
@@ -307,12 +307,7 @@ big_integer& big_integer::operator/=(big_integer const& rhs)
 
   divisor.normalize();
   limb_t last_digit = divisor.data_.back();
-  limb_t scaling_factor = last_digit == LIMB_T_MAX ? 1 : LIMB_T_MAX / (last_digit + 1);
-  if (last_digit != LIMB_T_MAX
-      && scaling_factor != LIMB_T_MAX
-      && LIMB_T_MAX - last_digit >= scaling_factor * (last_digit + 1)) {
-    scaling_factor++;
-  }
+  limb_t scaling_factor = last_digit == LIMB_T_MAX ? 1 : glue(1, 0) / (last_digit + 1);
   divisor.mul_short(scaling_factor);
   mul_short(scaling_factor);
   normalize();
@@ -320,10 +315,14 @@ big_integer& big_integer::operator/=(big_integer const& rhs)
   big_integer quot;
   quot.new_buffer(len() - divisor.len() + 1);
   data_.push_back(0);
+
+  big_integer div2, rem3, pref, res;
+  divisor.prefix(2, div2);
   for (size_t i = quot.len(); i --> 0 ;) {
-    limb_t qt = get_approx(prefix(3), divisor.prefix(2));
-    big_integer pref(prefix(divisor.len() + 1));
-    auto res(divisor);
+    limb_t qt = get_approx(prefix(3, rem3), div2);
+    prefix(divisor.len() + 1, pref);
+
+    res = divisor;
     res.mul_short(qt);
     if (res.is_negative()) {
       res.data_.push_back(0);
@@ -335,8 +334,11 @@ big_integer& big_integer::operator/=(big_integer const& rhs)
       res -= divisor;
       divisor.data_.pop_back();
     }
+
     quot.data_[i] = qt;
-    pref.data_.push_back(0);  // just in case `pref` is negative
+    if (pref.is_negative()) {
+      pref.data_.push_back(0);
+    }
     pref -= res;
     pref.new_buffer(divisor.len() + 1);
     assign_pref(pref);
@@ -397,7 +399,7 @@ big_integer& big_integer::operator<<=(int rhs)
   auto rest = num % LIMB_T_BITS;
   num /= LIMB_T_BITS;
   new_buffer(len() + num);
-  for (size_t i = len(); i --> 0;) {
+  for (size_t i = len(); i --> 0 && num > 0;) {
     data_[i] = i < num ? 0 : data_[i - num];
   }
   limb_t rem_bits = 0;
@@ -422,7 +424,7 @@ big_integer& big_integer::operator>>=(int rhs)
   auto rest = num % LIMB_T_BITS;
   num /= LIMB_T_BITS;
   auto fill_value = rest_bits();
-  for (size_t i = 0; i < len(); i++) {
+  for (size_t i = 0; i < len() && num > 0; i++) {
     data_[i] = i < len() - num ? data_[i + num] : fill_value;
   }
   limb_t rem_bits = rest == 0 ? 0 : fill_value << (LIMB_T_BITS - rest);
@@ -554,18 +556,9 @@ big_integer operator>>(big_integer a, int b)
 
 // ***comparison***
 
-int big_integer::compare_numerically(big_integer const &rhs) const {
-  if (is_negative() && !rhs.is_negative()) {
-    return LESS;
-  } else if (!is_negative() && rhs.is_negative()) {
-    return GREATER;
-  }
-  return compare_lexicographically(rhs, is_negative() ? LIMB_T_MAX : 0);
-}
-
 bool operator==(big_integer const& a, big_integer const& b)
 {
-  return a.compare_numerically(b) == EQUAL;
+  return (a - b).is_zero();
 }
 
 bool operator!=(big_integer const& a, big_integer const& b)
@@ -575,7 +568,7 @@ bool operator!=(big_integer const& a, big_integer const& b)
 
 bool operator<(big_integer const& a, big_integer const& b)
 {
-  return a.compare_numerically(b) == LESS;
+  return (a - b).is_negative();
 }
 
 bool operator>(big_integer const& a, big_integer const& b)
@@ -585,7 +578,7 @@ bool operator>(big_integer const& a, big_integer const& b)
 
 bool operator<=(big_integer const& a, big_integer const& b)
 {
-  return a.compare_numerically(b) <= EQUAL;
+  return !(b - a).is_negative();
 }
 
 bool operator>=(big_integer const& a, big_integer const& b)
