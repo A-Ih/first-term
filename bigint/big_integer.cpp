@@ -10,7 +10,7 @@ namespace {
   using dlimb_t = big_integer::dlimb_t;
   const size_t LIMB_T_BITS = std::numeric_limits<limb_t>::digits;
   const limb_t LIMB_T_MAX = std::numeric_limits<limb_t>::max();
-  const big_integer MOD(1000000000);  // for string converting purposes
+  const limb_t MOD(1000000000);  // for string converting purposes
   const size_t DECIMAL_DIGIT_LEN = 9;
   limb_t ms_bit(limb_t a) {
     return (a >> (LIMB_T_BITS - 1));
@@ -108,9 +108,7 @@ big_integer::big_integer(big_integer const &other)
 
 big_integer::big_integer(limb_t a) {
   data_.push_back(a);
-  if (is_negative()) {
-    data_.push_back(0);
-  }
+  make_positive();
 }
 
 big_integer::big_integer(int a)
@@ -127,10 +125,11 @@ big_integer::big_integer(std::string const &str)
   data_.push_back(0);
   for (size_t i = sign ? 1 : 0; i < str.size(); i += DECIMAL_DIGIT_LEN) {
     if (str.size() - i >= DECIMAL_DIGIT_LEN) {
-      *this *= MOD;
+      mul_short(MOD);
     } else {
-      *this *= std::stoi("1" + std::string(str.size() - i, '0'));
+      mul_short(std::stoi("1" + std::string(str.size() - i, '0')));
     }
+    make_positive();
     *this += std::stoi(str.substr(i, DECIMAL_DIGIT_LEN));
   }
   if (sign) {
@@ -189,11 +188,9 @@ big_integer& big_integer::operator-=(big_integer const &rhs)
 big_integer& big_integer::operator*=(big_integer const &rhs)
 {
   bool sign = is_negative() ^ rhs.is_negative();
-  auto a = is_negative() ? negate() : *this;
+  auto a = negate_if_negative();
   auto b(rhs);
-  if (b.is_negative()) {
-    b.negate();
-  }
+  b.negate_if_negative();
 
   b.normalize();
   a.normalize();
@@ -210,9 +207,7 @@ big_integer& big_integer::operator*=(big_integer const &rhs)
     data_[i + b.len()] += carry_num;
   }
   normalize();
-  if (is_negative()) {
-    data_.push_back(0);
-  }
+  make_positive();
   return sign ? negate() : *this;
 }
 
@@ -291,22 +286,28 @@ void big_integer::make_positive() {
   }
 }
 
+big_integer& big_integer::negate_if_negative() {
+  return is_negative() ? negate() : *this;
+}
+
 big_integer& big_integer::operator/=(big_integer const &rhs)
 {
   error(rhs.is_zero(), "division by zero");
   bool sign = is_negative() ^ rhs.is_negative();
-  if (is_negative()) {
-    negate();
-  }
+  negate_if_negative();
   big_integer divisor(rhs);
-  if (divisor.is_negative()) {
-    divisor.negate();
-  }
+  divisor.negate_if_negative();
   if (divisor.compare_lexicographically(*this) == GREATER) {
     return *this = 0;
   }
 
   divisor.normalize();
+
+  if (divisor.len() == 1) {
+    div_short(divisor.data_[0]);
+    return sign ? negate() : *this;
+  }
+
   limb_t last_digit = divisor.data_.back();
   limb_t scaling_factor = last_digit == LIMB_T_MAX ?
           1 : std::min(glue(0, LIMB_T_MAX), glue(1, 0) / (last_digit + 1));
@@ -349,9 +350,7 @@ big_integer& big_integer::operator/=(big_integer const &rhs)
     }
   }
   quot.normalize();
-  if (quot.is_negative()) {
-    quot.data_.push_back(0);
-  }
+  quot.make_positive();
   return *this = sign ? quot.negate() : quot;
 }
 
@@ -597,6 +596,20 @@ bool operator>=(big_integer const &a, big_integer const &b)
   return !(a < b);
 }
 
+// ***to_string and related functions***
+
+limb_t big_integer::div_short(limb_t divisor) {
+  limb_t carry = 0;
+  for (size_t i = len(); i --> 0;) {
+    dlimb_t t = glue(carry, 0) + data_[i];
+    data_[i] = t / divisor;
+    carry = t % divisor;
+  }
+  normalize();
+  make_positive();
+  return carry;
+}
+
 std::string to_string(big_integer const &a)
 {
   if (a.is_zero()) {
@@ -608,9 +621,8 @@ std::string to_string(big_integer const &a)
     temp.negate();
   }
   while (!temp.is_zero()) {
-    auto digit = temp % MOD;
-    temp /= MOD;
-    auto digit_str = std::to_string(digit.data_[0]);
+    auto digit = temp.div_short(MOD);
+    auto digit_str = std::to_string(digit);
     res.append(digit_str.rbegin(), digit_str.rend());
     if (!temp.is_zero()) {
       res.append(DECIMAL_DIGIT_LEN - digit_str.size(), '0');
