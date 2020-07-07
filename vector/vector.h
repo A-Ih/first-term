@@ -13,8 +13,8 @@ struct vector
     typedef const T* const_iterator;
 
     vector();                               // O(1) nothrow
-    vector(vector const &other);                  // O(N) strong
-    vector& operator=(vector const& other); // O(N) strong
+    vector(const vector &other);                  // O(N) strong
+    vector& operator=(const vector &other); // O(N) strong
 
     ~vector();                              // O(N) nothrow
 
