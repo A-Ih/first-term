@@ -59,16 +59,20 @@ struct vector
 
 private:
   void ensure_capacity(size_t);
-  void new_buffer(size_t new_capacity);
-  void destroy_elems(iterator start,  size_t len);
-
+  T* new_buffer(size_t new_capacity) const;
+  void destroy_elems(iterator start,  size_t len) const;
+  void delete_buffer(T* buff, size_t len) const;
+  void replace_buffer(size_t new_cap);
   // exceptions
   template<typename U>
   static std::string ptr_to_str(U *ptr);
   template<typename U>
   static std::string ptr_to_str(const U *ptr);
-  void error(const std::string &message, int err_code = 0) const;
+
+  // if cond is false, error is thrown
   void error(bool cond, const std::string &message, int err_code = 0) const;
+  // some string conversions are expensive so it's more convenient to check condition inside of `if`
+  void error(const std::string &message, int err_code = 0) const;
   static const size_t INVALID_INDEX = 1;
   static const size_t INVALID_IT = 2;
   static const size_t INVALID_IT_RANGE = 3;
@@ -111,14 +115,20 @@ void vector<T>::error(bool cond, const std::string &message, int err_code) const
 }
 
 template<typename T>
-void vector<T>::destroy_elems(iterator start, size_t len) {
+void vector<T>::destroy_elems(iterator start, size_t len) const {
   for (iterator i = start + len; i-- != start; ) {
     i->~T();
   }
 }
 
 template<typename T>
-void vector<T>::new_buffer(size_t new_capacity) {
+void vector<T>::delete_buffer(T *buff, size_t len) const {
+  destroy_elems(buff, len);
+  operator delete(buff);
+}
+
+template<typename T>
+T* vector<T>::new_buffer(size_t new_capacity) const {
   T* new_space = new_capacity == 0 ?
           nullptr : static_cast<T*>(operator new(sizeof(T) * new_capacity));
   size_t i = 0;
@@ -127,26 +137,25 @@ void vector<T>::new_buffer(size_t new_capacity) {
         new(new_space + i)T(data_[i]);
     }
   } catch(...) {
-    destroy_elems(new_space, i);
-    operator delete(new_space);
+    delete_buffer(new_space, i);
     throw;
   }
+  return new_space;
+}
+
+template<typename T>
+void vector<T>::replace_buffer(size_t new_cap) {
   T* was = data_;
-  data_ = new_space;
-  capacity_ = new_capacity;
-  destroy_elems(was, size_);
-  if (was != nullptr) {
-    operator delete(was);
-  }
+  data_ = new_buffer(new_cap);
+  delete_buffer(was, size_);
+  capacity_ = new_cap;
 }
 
 template<typename T>
 void vector<T>::ensure_capacity(size_t new_cap) {
-  if (new_cap <= capacity_) {
-    return;
+  if (new_cap > capacity_) {
+    replace_buffer(capacity_ * 2 < new_cap ? new_cap : capacity_ * 2);
   }
-  new_cap = capacity_ * 2 < new_cap ? new_cap : capacity_ * 2;
-  new_buffer(new_cap);
 }
 
 template<typename T>
@@ -154,11 +163,9 @@ vector<T>::vector() = default;
 
 template<typename T>
 vector<T>::vector(const vector<T> &other) {
-  new_buffer(other.size_);
+  data_ = other.new_buffer(other.size_);
   size_ = other.size_;
-  for (size_t i = 0; i < size_; i++) {
-    new(data_ + i)T(other.data_[i]);
-  }
+  capacity_ = size_;
 }
 
 template<typename T>
@@ -173,8 +180,7 @@ vector<T>& vector<T>::operator=(const vector<T> &other) {
 
 template<typename T>
 vector<T>::~vector() {
-  clear();
-  operator delete(data_);
+  delete_buffer(data_, size_);
 }
 
 template<typename T>
@@ -252,21 +258,20 @@ size_t vector<T>::capacity() const {
 template<typename T>
 void vector<T>::reserve(size_t demanded_capacity) {
   if (demanded_capacity > capacity_) {
-    new_buffer(demanded_capacity);
+    replace_buffer(demanded_capacity);
   }
 }
 
 template<typename T>
 void vector<T>::shrink_to_fit() {
   if (size_ < capacity_) {
-    new_buffer(size_);
+    replace_buffer(size_);
   }
 }
 
 template<typename T>
 void vector<T>::clear() {
-  destroy_elems(data_, size_);
-  size_ = 0;
+  erase(begin(), end());
 }
 
 template<typename T>
