@@ -2,7 +2,6 @@
 #define VECTOR_H
 
 #include <cstddef>
-#include <cassert>
 #include <stdexcept>
 #include <sstream>
 
@@ -65,9 +64,9 @@ private:
 
   // exceptions
   template<typename U>
-  static std::string ptr(U *it);
+  static std::string ptr_to_str(U *ptr);
   template<typename U>
-  static std::string ptr(const U *it);
+  static std::string ptr_to_str(const U *ptr);
   void error(const std::string &message, int err_code = 0) const;
   void error(bool cond, const std::string &message, int err_code = 0) const;
   static const size_t INVALID_INDEX = 1;
@@ -82,16 +81,16 @@ private:
 
 template<typename T>
 template<typename U>
-std::string vector<T>::ptr(U *it) {
+std::string vector<T>::ptr_to_str(U *ptr) {
   std::ostringstream conv;
-  conv << it;
+  conv << ptr;
   return conv.str();
 }
 
 template<typename T>
 template<typename U>
-std::string vector<T>::ptr(const U *it) {
-  return ptr(const_cast<U *>(it));
+std::string vector<T>::ptr_to_str(const U *ptr) {
+  return ptr_to_str(const_cast<U*>(ptr));
 }
 
 template<typename T>
@@ -100,7 +99,7 @@ void vector<T>::error(const std::string &message, int err_code) const {
           {"", "invalid index: ", "invalid iterator: ", "invalid iterator range: "};
   throw std::runtime_error(ERRS[err_code]
                            + message
-                           + " in vector " + ptr(this)
+                           + " in vector " + ptr_to_str(this)
                            + " [size = " + std::to_string(size_) + "]");
 }
 
@@ -175,7 +174,7 @@ vector<T>& vector<T>::operator=(const vector<T> &other) {
 template<typename T>
 vector<T>::~vector() {
   clear();
-  operator delete(static_cast<void*>(data_));
+  operator delete(data_);
 }
 
 template<typename T>
@@ -237,8 +236,7 @@ void vector<T>::push_back(const T &val) {
 template<typename T>
 void vector<T>::pop_back() {
   error(size_ == 0, "no elements");
-  size_--;
-  data_[size_].~T();
+  erase(end() - 1);
 }
 
 template<typename T>
@@ -294,7 +292,7 @@ typename vector<T>::const_iterator vector<T>::end() const {
 template<typename T>
 typename vector<T>::iterator vector<T>::insert(vector<T>::iterator pos, const T &val) {
   if (pos < begin() || pos > end()) {
-    error(ptr(pos), INVALID_IT);
+    error(ptr_to_str(pos), INVALID_IT);
   }
   size_t position = pos - begin();
   T tempval = val;
@@ -325,10 +323,7 @@ typename vector<T>::iterator vector<T>::erase(vector<T>::const_iterator pos) {
 template<typename T>
 typename vector<T>::iterator vector<T>::erase(vector<T>::iterator first, vector<T>::iterator last) {
   if (begin() > first || first > last || last > end()) {
-    error(ptr(first) + ":" + ptr(last), INVALID_IT_RANGE);
-  }
-  if (first == last) {
-    return first;
+    error(ptr_to_str(first) + ":" + ptr_to_str(last), INVALID_IT_RANGE);
   }
   ptrdiff_t diff = last - first;
   for (iterator i = first; i != end() - diff; i++) {
