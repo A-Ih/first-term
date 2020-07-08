@@ -116,8 +116,8 @@ void vector<T>::error(bool cond, const std::string &message, int err_code) const
 
 template<typename T>
 void vector<T>::destroy_elems(iterator start, size_t len) const {
-  for (iterator i = start + len; i-- != start; ) {
-    i->~T();
+  for (size_t i = len; i --> 0;) {
+    start[i].~T();
   }
 }
 
