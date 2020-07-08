@@ -12,12 +12,12 @@ struct big_integer
   typedef uint64_t dlimb_t;
 
   big_integer();
-  big_integer(big_integer const &other);
+  big_integer(big_integer const &other) = default;
   big_integer(int a);
   explicit big_integer(std::string const &str);
   ~big_integer();
 
-  big_integer& operator=(big_integer const &other);
+  big_integer& operator=(big_integer const &other) = default;
 
   big_integer& operator+=(big_integer const &rhs);
   big_integer& operator-=(big_integer const &rhs);
@@ -55,10 +55,9 @@ private:
   size_t len() const ;
   limb_t rest_bits() const;
   bool is_negative() const;
-  bool is_zero() const;
   void new_buffer(size_t new_size);
   void make_positive();
-  big_integer& negate_if_negative();
+  big_integer& make_abs();
 
   // division and multiplication
   void normalize();
@@ -73,7 +72,9 @@ private:
   int compare_numerically(big_integer const &rhs) const;
 
   // bitwise operations
-  big_integer& bit_operation(big_integer const &rhs, std::function<limb_t(limb_t, limb_t)> f);
+  big_integer& bit_operation(
+          big_integer const &rhs,
+          const std::function<limb_t(limb_t, limb_t)> &f);
   big_integer& negate();
 private:
   std::vector<limb_t> data_;
@@ -92,14 +93,6 @@ big_integer operator^(big_integer a, big_integer const &b);
 big_integer operator<<(big_integer a, int b);
 big_integer operator>>(big_integer a, int b);
 
-bool operator==(big_integer const &a, big_integer const &b);
-bool operator!=(big_integer const &a, big_integer const &b);
-bool operator<(big_integer const &a, big_integer const &b);
-bool operator>(big_integer const &a, big_integer const &b);
-bool operator<=(big_integer const &a, big_integer const &b);
-bool operator>=(big_integer const &a, big_integer const &b);
-
-std::string to_string(big_integer const &a);
 std::ostream& operator<<(std::ostream &s, big_integer const &a);
 
 #endif // BIG_INTEGER_H

@@ -12,11 +12,11 @@ namespace {
   const limb_t LIMB_T_MAX = std::numeric_limits<limb_t>::max();
   const limb_t MOD(1000000000);  // for string converting purposes
   const size_t DECIMAL_DIGIT_LEN = 9;
-  limb_t ms_bit(limb_t a) {
+  // ***helper functions***
+
+  limb_t most_significant_bit(limb_t a) {
     return (a >> (LIMB_T_BITS - 1));
   }
-
-  // ***helper functions***
 
   limb_t pow2(limb_t power) {
     return static_cast<limb_t>(1) << power;
@@ -29,20 +29,21 @@ namespace {
     return carry(a, b) + carry(a + b, c);
   }
 
-  limb_t hi(limb_t x) {
+  limb_t limb_high(limb_t x) {
     return (x >> (LIMB_T_BITS / 2));
   }
 
-  limb_t lo(limb_t x) {
+  limb_t limb_low(limb_t x) {
     return (x << (LIMB_T_BITS / 2)) >> (LIMB_T_BITS / 2);
   }
 
   std::pair<limb_t, limb_t> mul_limb_t(limb_t x, limb_t y) {
-    limb_t a = lo(x), b = hi(x), c = lo(y), d = hi(y);
+    limb_t a = limb_low(x), b = limb_high(x), c = limb_low(y), d = limb_high(y);
     limb_t t = a * d + b * c, tc = carry(a * d, b * c);
-    limb_t lo1 = a * c, lo2 = (lo(t) << LIMB_T_BITS / 2);
-    // carry(hi(t), b * d, carry(lo1, lo2)) == 0
-    return {hi(t) + b * d + carry(lo1, lo2) + (tc << LIMB_T_BITS / 2), lo1 + lo2};  // {hi, lo}
+    limb_t lo1 = a * c, lo2 = (limb_low(t) << LIMB_T_BITS / 2);
+    // carry(limb_high(t), b * d, carry(lo1, lo2)) == 0
+    // {limb_high, limb_low}
+    return {limb_high(t) + b * d + carry(lo1, lo2) + (tc << LIMB_T_BITS / 2), lo1 + lo2};
   }
 
   void error(bool cond, std::string const &message) {
@@ -53,16 +54,7 @@ namespace {
 }
 
 bool big_integer::is_negative() const {
-  return ms_bit(data_[len() - 1]) == 1;
-}
-
-bool big_integer::is_zero() const {
-  for (size_t i = 0; i < len(); i++) {
-    if (data_[i] != 0) {
-      return false;
-    }
-  }
-  return true;
+  return most_significant_bit(data_[len() - 1]) == 1;
 }
 
 limb_t big_integer::rest_bits() const {
@@ -82,28 +74,21 @@ void big_integer::new_buffer(size_t new_size) {
 }
 
 void big_integer::normalize() {
-  if (is_zero()) {
-    new_buffer(1);
-    return;
+  if (*this == 0) {
+    return new_buffer(1);
   }
   size_t i = len() - 1;
   while (i > 0) {
     if (data_[i] != 0) {
-      break;
+      return new_buffer(i + 1);
     }
     i--;
   }
-  new_buffer(i + 1);
 }
 
 big_integer::big_integer()
 {
   data_.push_back(0);
-}
-
-big_integer::big_integer(big_integer const &other)
-{
-  data_ = other.data_;
 }
 
 big_integer::big_integer(limb_t a) {
@@ -142,18 +127,11 @@ big_integer::~big_integer()
   data_.clear();
 }
 
-big_integer& big_integer::operator=(big_integer const &other)
-{
-  data_ = other.data_;
-  return *this;
-}
-
 // ***subtraction and addition***
 
 void big_integer::add_on_pref(big_integer const &rhs, size_t at) {
   bool same_sign = rhs.is_negative() == is_negative();
-  size_t new_length = std::max(len(), rhs.len() + at);
-  new_buffer(new_length);
+  new_buffer(std::max(len(), rhs.len() + at));
   auto carry_bit = 0;
   for (size_t i = at; i < len(); i++) {
     limb_t rhs_digit = i - at < rhs.len() ? rhs.data_[i - at] : rhs.rest_bits();
@@ -188,9 +166,9 @@ big_integer& big_integer::operator-=(big_integer const &rhs)
 big_integer& big_integer::operator*=(big_integer const &rhs)
 {
   bool sign = is_negative() ^ rhs.is_negative();
-  auto a = negate_if_negative();
+  auto a = make_abs();
   auto b(rhs);
-  b.negate_if_negative();
+  b.make_abs();
 
   b.normalize();
   a.normalize();
@@ -223,22 +201,22 @@ namespace {
 limb_t get_approx(big_integer const &a, big_integer const &b) {
   limb_t u2 = a.data_[2], u1 = a.data_[1], u0 = a.data_[0];
   limb_t d1 = b.data_[1], d0 = b.data_[0];
-  dlimb_t U = glue(u2, u1);
-  dlimb_t D = glue(d1, d0);
+  dlimb_t numer = glue(u2, u1);
+  dlimb_t denom = glue(d1, d0);
   if (u2 == d1) {
     dlimb_t S = glue(d0 - u1, 0) - u0;
-    return S <= D ? LIMB_T_MAX : LIMB_T_MAX - 1;
+    return S <= denom ? LIMB_T_MAX : LIMB_T_MAX - 1;
   }
-  dlimb_t Q = U / d1;
-  dlimb_t DQ = Q * d0;
-  dlimb_t R = glue(U - Q*d1, u0);
-  if (R < DQ) {
-    Q--, R += D;
-    if (R >= D && R < DQ) {
-      Q--, R += D;
+  dlimb_t quot_approx = numer / d1;
+  dlimb_t err = quot_approx * d0;
+  dlimb_t rem_approx = glue(numer - quot_approx * d1, u0);
+  if (rem_approx < err) {
+    quot_approx--, rem_approx += denom;
+    if (rem_approx >= denom && rem_approx < err) {
+      quot_approx--, rem_approx += denom;
     }
   }
-  return Q;
+  return quot_approx;
 }
 
 void big_integer::mul_short(limb_t short_factor) {  // slightly faster version of `*=` for division
@@ -280,23 +258,25 @@ int big_integer::compare_lexicographically(
   return EQUAL;
 }
 
+// Not to be confused with abs
+// This checks the most significant bit and if it's 1, the number
 void big_integer::make_positive() {
   if (is_negative()) {
     data_.push_back(0);
   }
 }
 
-big_integer& big_integer::negate_if_negative() {
+big_integer& big_integer::make_abs() {
   return is_negative() ? negate() : *this;
 }
 
 big_integer& big_integer::operator/=(big_integer const &rhs)
 {
-  error(rhs.is_zero(), "division by zero");
+  error(rhs == 0, "division by zero");
   bool sign = is_negative() ^ rhs.is_negative();
-  negate_if_negative();
+  make_abs();
   big_integer divisor(rhs);
-  divisor.negate_if_negative();
+  divisor.make_abs();
   if (divisor.compare_lexicographically(*this) == GREATER) {
     return *this = 0;
   }
@@ -356,16 +336,22 @@ big_integer& big_integer::operator/=(big_integer const &rhs)
 
 big_integer& big_integer::operator%=(big_integer const &rhs)
 {
-  error(rhs.is_zero(), "division by zero");
+  error(rhs == 0, "division by zero");
   big_integer temp(*this);
   return *this -= (temp /= rhs) *= rhs;
 }
 
 // ***bitwise operations***
 
+namespace {
+  const auto &bit_and = std::bit_and<limb_t>();
+  const auto &bit_or = std::bit_or<limb_t>();
+  const auto &bit_xor = std::bit_xor<limb_t>();
+}
+
 big_integer& big_integer::bit_operation(
         big_integer const &rhs,
-        std::function<limb_t(limb_t, limb_t)> f) {
+        const std::function<limb_t(limb_t, limb_t)> &f) {
   new_buffer(std::max(len(), rhs.len()));
   auto rbr = rhs.rest_bits();
   for (size_t i = 0; i < len(); i++) {
@@ -376,17 +362,17 @@ big_integer& big_integer::bit_operation(
 
 big_integer& big_integer::operator&=(big_integer const &rhs)
 {
-  return bit_operation(rhs, std::bit_and<limb_t>());
+  return bit_operation(rhs, bit_and);
 }
 
 big_integer& big_integer::operator|=(big_integer const &rhs)
 {
-  return bit_operation(rhs, std::bit_or<limb_t>());
+  return bit_operation(rhs, bit_or);
 }
 
 big_integer& big_integer::operator^=(big_integer const &rhs)
 {
-  return bit_operation(rhs, std::bit_xor<limb_t>());
+  return bit_operation(rhs, bit_xor);
 }
 
 big_integer& big_integer::operator<<=(int rhs)
@@ -476,7 +462,7 @@ big_integer big_integer::operator-() const
 big_integer big_integer::operator~() const
 {
   big_integer r(*this);
-  return r.bit_operation(-1, std::bit_xor<limb_t>());
+  return r.bit_operation(-1, bit_xor);
 }
 
 big_integer& big_integer::operator++()
@@ -558,12 +544,13 @@ big_integer operator>>(big_integer a, int b)
 // ***comparison***
 
 int big_integer::compare_numerically(big_integer const &rhs) const {
-  if (is_negative() && !rhs.is_negative()) {
+  bool neg1 = is_negative(), neg2 = rhs.is_negative();
+  if (neg1 && !neg2) {
     return LESS;
-  } else if (!is_negative() && rhs.is_negative()) {
+  } else if (!neg1 && neg2) {
     return GREATER;
   }
-  return compare_lexicographically(rhs, is_negative() ? LIMB_T_MAX : 0);
+  return compare_lexicographically(rhs, neg1 ? LIMB_T_MAX : 0);
 }
 
 bool operator==(big_integer const &a, big_integer const &b)
@@ -612,19 +599,17 @@ limb_t big_integer::div_short(limb_t divisor) {
 
 std::string to_string(big_integer const &a)
 {
-  if (a.is_zero()) {
+  if (a == 0) {
     return "0";
   }
   std::string res;
   auto temp(a);
-  if (temp.is_negative()) {
-    temp.negate();
-  }
-  while (!temp.is_zero()) {
+  temp.make_abs();
+  while (temp != 0) {
     auto digit = temp.div_short(MOD);
     auto digit_str = std::to_string(digit);
     res.append(digit_str.rbegin(), digit_str.rend());
-    if (!temp.is_zero()) {
+    if (temp != 0) {
       res.append(DECIMAL_DIGIT_LEN - digit_str.size(), '0');
     }
   }
