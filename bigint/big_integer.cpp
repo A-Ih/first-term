@@ -259,7 +259,6 @@ int big_integer::compare_lexicographically(
 }
 
 // Not to be confused with abs
-// This checks the most significant bit and if it's 1, the number
 void big_integer::make_positive() {
   if (is_negative()) {
     data_.push_back(0);
