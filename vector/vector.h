@@ -11,8 +11,8 @@ struct vector
     typedef T* iterator;
     typedef const T* const_iterator;
 
-    vector();                               // O(1) nothrow
-    vector(const vector &other);                  // O(N) strong
+    vector() = default;                     // O(1) nothrow
+    vector(const vector &other);            // O(N) strong
     vector& operator=(const vector &other); // O(N) strong
 
     ~vector();                              // O(N) nothrow
@@ -29,7 +29,7 @@ struct vector
 
     T& back();                              // O(1) nothrow
     const T& back() const;                  // O(1) nothrow
-    void push_back(const T &val);               // O(1)* strong
+    void push_back(const T &val);           // O(1)* strong
     void pop_back();                        // O(1) nothrow
 
     bool empty() const;                     // O(1) nothrow
@@ -40,7 +40,7 @@ struct vector
 
     void clear();                           // O(N) nothrow
 
-    void swap(vector &other);                     // O(1) nothrow
+    void swap(vector &other);               // O(1) nothrow
 
     iterator begin();                       // O(1) nothrow
     iterator end();                         // O(1) nothrow
@@ -48,13 +48,13 @@ struct vector
     const_iterator begin() const;           // O(1) nothrow
     const_iterator end() const;             // O(1) nothrow
 
-    iterator insert(iterator pos, const T &val); // O(N) weak
+    iterator insert(iterator pos, const T &val);       // O(N) weak
     iterator insert(const_iterator pos, const T &val); // O(N) weak
 
     iterator erase(iterator pos);           // O(N) weak
     iterator erase(const_iterator pos);     // O(N) weak
 
-    iterator erase(iterator first, iterator last); // O(N) weak
+    iterator erase(iterator first, iterator last);             // O(N) weak
     iterator erase(const_iterator first, const_iterator last); // O(N) weak
 
 private:
@@ -64,18 +64,10 @@ private:
   void delete_buffer(T* buff, size_t len) const;
   void replace_buffer(size_t new_cap);
   // exceptions
-  template<typename U>
-  static std::string ptr_to_str(U *ptr);
-  template<typename U>
-  static std::string ptr_to_str(const U *ptr);
 
-  // if cond is false, error is thrown
-  void error(bool cond, const std::string &message, int err_code = 0) const;
-  // some string conversions are expensive so it's more convenient to check condition inside of `if`
-  void error(const std::string &message, int err_code = 0) const;
-  static const size_t INVALID_INDEX = 1;
-  static const size_t INVALID_IT = 2;
-  static const size_t INVALID_IT_RANGE = 3;
+  void error(const std::string &message) const;
+  void check_index(size_t i) const;
+  void check_empty() const;
 
 private:
   T* data_ = nullptr;
@@ -84,33 +76,23 @@ private:
 };
 
 template<typename T>
-template<typename U>
-std::string vector<T>::ptr_to_str(U *ptr) {
-  std::ostringstream conv;
-  conv << ptr;
-  return conv.str();
+void vector<T>::error(const std::string &message) const {
+  static std::ostringstream conv;
+  conv  << message << " in vector " << this << " [size = " << size_ << "]";
+  throw std::runtime_error(conv.str());
 }
 
 template<typename T>
-template<typename U>
-std::string vector<T>::ptr_to_str(const U *ptr) {
-  return ptr_to_str(const_cast<U*>(ptr));
+void vector<T>::check_index(size_t i) const {
+  if (i > size()) {
+    error(std::string("invalid index: ") + std::to_string(i));
+  }
 }
 
 template<typename T>
-void vector<T>::error(const std::string &message, int err_code) const {
-  static const std::string ERRS[]  =
-          {"", "invalid index: ", "invalid iterator: ", "invalid iterator range: "};
-  throw std::runtime_error(ERRS[err_code]
-                           + message
-                           + " in vector " + ptr_to_str(this)
-                           + " [size = " + std::to_string(size_) + "]");
-}
-
-template<typename T>
-void vector<T>::error(bool cond, const std::string &message, int err_code) const {
-  if (cond) {
-    error(message, err_code);
+void vector<T>::check_empty() const {
+  if (empty()) {
+    error("no elements");
   }
 }
 
@@ -159,9 +141,6 @@ void vector<T>::ensure_capacity(size_t new_cap) {
 }
 
 template<typename T>
-vector<T>::vector() = default;
-
-template<typename T>
 vector<T>::vector(const vector<T> &other) {
   data_ = other.new_buffer(other.size_);
   size_ = other.size_;
@@ -185,13 +164,13 @@ vector<T>::~vector() {
 
 template<typename T>
 T& vector<T>::operator[](size_t i) {
-  error(i >= size_, std::to_string(i), INVALID_INDEX);
+  check_index(i);
   return data_[i];
 }
 
 template<typename T>
 const T& vector<T>::operator[](size_t i) const {
-  error(i >= size_, std::to_string(i), INVALID_INDEX);
+  check_index(i);
   return data_[i];
 }
 
@@ -212,25 +191,25 @@ size_t vector<T>::size() const {
 
 template<typename T>
 T& vector<T>::front() {
-  error(size_ == 0, "no elements");
+  check_empty();
   return data_[0];
 }
 
 template<typename T>
 const T& vector<T>::front() const {
-  error(size_ == 0, "no elements");
+  check_empty();
   return data_[0];
 }
 
 template<typename T>
 T& vector<T>::back() {
-  error(size_ == 0, "no elements");
+  check_empty();
   return data_[size_ - 1];
 }
 
 template<typename T>
 const T& vector<T>::back() const {
-  error(size_ == 0, "no elements");
+  check_empty();
   return data_[size_ - 1];
 }
 
@@ -241,7 +220,7 @@ void vector<T>::push_back(const T &val) {
 
 template<typename T>
 void vector<T>::pop_back() {
-  error(size_ == 0, "no elements");
+  check_empty();
   erase(end() - 1);
 }
 
@@ -296,9 +275,6 @@ typename vector<T>::const_iterator vector<T>::end() const {
 
 template<typename T>
 typename vector<T>::iterator vector<T>::insert(vector<T>::iterator pos, const T &val) {
-  if (pos < begin() || pos > end()) {
-    error(ptr_to_str(pos), INVALID_IT);
-  }
   size_t position = pos - begin();
   T tempval = val;
   ensure_capacity(size_ + 1);
@@ -327,9 +303,6 @@ typename vector<T>::iterator vector<T>::erase(vector<T>::const_iterator pos) {
 
 template<typename T>
 typename vector<T>::iterator vector<T>::erase(vector<T>::iterator first, vector<T>::iterator last) {
-  if (begin() > first || first > last || last > end()) {
-    error(ptr_to_str(first) + ":" + ptr_to_str(last), INVALID_IT_RANGE);
-  }
   ptrdiff_t diff = last - first;
   for (iterator i = first; i != end() - diff; i++) {
     *i = *(i + diff);
