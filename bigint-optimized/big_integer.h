@@ -3,9 +3,8 @@
 
 #include <string>
 #include <cstdint>
-#include <vector>
 #include <functional>
-#include <memory>
+#include "small_obj_storage.h"
 
 struct big_integer
 {
@@ -79,64 +78,7 @@ private:
   big_integer& negate();
 
 private:
-  // storage with only COW-optimisation
-  struct cow_storage {
-    cow_storage();
-    cow_storage& operator=(const cow_storage &other);
-
-    size_t size() const;
-    void resize(size_t new_sz);
-    void resize(size_t new_sz, limb_t fill_value);
-    void push_back(const limb_t &val);
-    void clear();
-    const limb_t& operator[](size_t id) const;
-    limb_t& operator[](size_t id);
-    const limb_t& back() const;
-
-    std::shared_ptr< std::vector<limb_t> > common_buff;
-
-  private:
-    void unify_if_needed();
-  };
-
-  // storage with COW and SO optimisations
-
-  static const size_t SMALL_OBJECT_SIZE = sizeof(cow_storage) / sizeof(limb_t);
-
-  struct small_obj_storage {
-
-    small_obj_storage() = default;
-    small_obj_storage(const small_obj_storage &other);
-
-    small_obj_storage& operator=(const small_obj_storage &other);
-
-    ~small_obj_storage();
-
-    size_t size() const;
-    void resize(size_t new_sz);
-    void resize(size_t new_sz, limb_t fill_value);
-    void push_back(const limb_t &val);
-    void clear();
-    const limb_t& operator[](size_t id) const;
-    limb_t& operator[](size_t id);
-    const limb_t& back() const;
-
-    union united_storage {
-      cow_storage *big_storage;
-      struct {
-        limb_t buff[SMALL_OBJECT_SIZE] = {0};
-        size_t len = 0;
-      } small_storage{};
-
-      limb_t& get_ith(bool is_promoted, size_t i);
-      const limb_t& get_ith(bool is_promoted, size_t i) const;
-      void promote();
-    } small_obj_buff;
-
-    bool promoted = false;
-  };
-
-  small_obj_storage data_;
+  small_obj_storage<limb_t> data_;
 };
 
 big_integer operator+(big_integer a, const big_integer &b);
