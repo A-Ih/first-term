@@ -2,9 +2,7 @@
 #define VECTOR_H
 
 #include <cstddef>
-#include <stdexcept>
-#include <sstream>
-#include <cassert>
+#include <utility>
 
 template <typename T>
 struct vector
@@ -61,8 +59,7 @@ struct vector
 private:
   void ensure_capacity(size_t);
   T* new_buffer(size_t new_capacity) const;
-  void destroy_elems(iterator start,  size_t len) const;
-  void delete_buffer(T* buff, size_t len) const;
+  static void delete_buffer(T* buff, size_t len);
   void replace_buffer(size_t new_cap);
 
 private:
@@ -72,15 +69,10 @@ private:
 };
 
 template<typename T>
-void vector<T>::destroy_elems(iterator start, size_t len) const {
+void vector<T>::delete_buffer(T *buff, size_t len) {
   for (size_t i = len; i > 0; i--) {
-    (start + i - 1)->~T();
+    (buff + i - 1)->~T();
   }
-}
-
-template<typename T>
-void vector<T>::delete_buffer(T *buff, size_t len) const {
-  destroy_elems(buff, len);
   operator delete(buff);
 }
 
@@ -139,13 +131,11 @@ vector<T>::~vector() {
 
 template<typename T>
 T& vector<T>::operator[](size_t i) {
-  assert(i < size_);
   return data_[i];
 }
 
 template<typename T>
 const T& vector<T>::operator[](size_t i) const {
-  assert(i < size_);
   return data_[i];
 }
 
@@ -166,37 +156,40 @@ size_t vector<T>::size() const {
 
 template<typename T>
 T& vector<T>::front() {
-  assert(size_ != 0);
   return data_[0];
 }
 
 template<typename T>
 const T& vector<T>::front() const {
-  assert(size_ != 0);
   return data_[0];
 }
 
 template<typename T>
 T& vector<T>::back() {
-  assert(size_ != 0);
   return data_[size_ - 1];
 }
 
 template<typename T>
 const T& vector<T>::back() const {
-  assert(size_ != 0);
   return data_[size_ - 1];
 }
 
 template<typename T>
 void vector<T>::push_back(const T &val) {
-  insert(end(), val);
+  if (size_ == capacity_) {
+    T copy = val;
+    ensure_capacity(size_ + 1);
+    new(data_ + size_)T(copy);
+  } else {
+    new(data_ + size_)T(val);
+  }
+  size_++;
 }
 
 template<typename T>
 void vector<T>::pop_back() {
-  assert(size_ != 0);
-  erase(end() - 1);
+  back().~T();
+  size_--;
 }
 
 template<typename T>
@@ -255,17 +248,11 @@ typename vector<T>::iterator vector<T>::insert(vector<T>::iterator pos, const T 
 
 template<typename T>
 typename vector<T>::iterator vector<T>::insert(vector<T>::const_iterator pos, const T &val) {
-  size_t position = pos - begin();
-  if (size_ == capacity_) {
-    T copy = val;
-    ensure_capacity(size_ + 1);
-    new(data_ + size_)T(copy);
-  } else {
-    new(data_ + size_)T(val);
-  }
-  size_++;
+  ptrdiff_t position = pos - begin();
+  push_back(val);
   for (size_t i = size_ - 1; i >= position + 1; i--) {
-    std::swap(data_[i], data_[i - 1]);
+    using std::swap;
+    swap(data_[i], data_[i - 1]);
   }
   return data_ + position;
 }
@@ -293,18 +280,21 @@ typename vector<T>::iterator vector<T>::erase(
   ptrdiff_t pos_first = first - begin();
   ptrdiff_t to_end = end() - first;
   for (size_t i = 0; i != to_end - diff; i++) {
-    std::swap(data_[pos_first + i], data_[pos_first + i + diff]);
+    using std::swap;
+    swap(data_[pos_first + i], data_[pos_first + i + diff]);
   }
-  destroy_elems(end() - diff, diff);
-  size_ -= diff;
+  for (size_t i = 0; i < diff; i++) {
+    pop_back();
+  }
   return begin() + pos_first + diff;
 }
 
 template<typename T>
 void vector<T>::swap(vector<T> &other) {
-  std::swap(size_, other.size_);
-  std::swap(capacity_, other.capacity_);
-  std::swap(data_, other.data_);
+  using std::swap;
+  swap(size_, other.size_);
+  swap(capacity_, other.capacity_);
+  swap(data_, other.data_);
 }
 
 #endif // VECTOR_H
