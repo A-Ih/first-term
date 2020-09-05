@@ -3,18 +3,16 @@
                 global          _start
 _start:
 
-                sub             rsp, 3 * 128 * 8  ; three chuncks with 128 portions of 8 bytes
-                lea             rdi, [rsp + 128 * 8]  ; two chuncks for hi- and lo- parts
-                mov             rcx, 128
+                lea             rsp, [rsp - 3 * long_size * 8]  ; three chuncks with 128 portions of 8 bytes
+                mov             rcx, long_size
+                lea             rdi, [rsp + rcx * 8]  ; two chuncks for hi- and lo- parts
                 call            read_long  ; lo- part is read
                 mov             rdi, rsp
-                mov             rcx, 128
                 call            read_long
                 mov             rsi, rdi
-                lea             rdi, [rsp + 128 * 8]  ; pointing to big chunk again
-                mov             rcx, 128
+                lea             rdi, [rsp + rcx * 8]  ; pointing to big chunk again
                 call            mul_long_long
-                mov             rcx, 128 * 2  ; write both parts
+                add             rcx, rcx  ; write both parts
                 call            write_long
 
                 mov             al, 0x0a
@@ -32,10 +30,12 @@ mul_long_long:
     push            rdi
     push            rsi
     push            rcx
-
-        lea             rdi, [rdi + 128 * 8]
+ 
+        lea             rdi, [rdi + rcx * 8]
         call            set_zero  ; set hi- part to zero
-        lea             rdi, [rdi - 128 * 8]
+        mov             r8, rcx  ; length of the number
+        lea             rcx, [rcx * 8]
+        sub             rdi, rcx
 
 ;  length   -- r8
 ;  factor1  -- r9
@@ -43,16 +43,13 @@ mul_long_long:
 ;  buffer1  -- r11
 ;  buffer2  -- r12
 
-        mov             r8, rcx  ; length of the number
         mov             r9, rdi  ; first factor (2 * length * 8)
         mov             r10, rsi  ; second factor (length * 8)
 
-        mov             rax, 16
-        mul             r8
-        mov             rcx, rax
+        add             rcx, rcx
         sub             rsp, rcx
         mov             r11, rsp  ; first buffer (holds initial value of first factor)
-        lea             r12, [rsp + 128 * 8]  ; second buffer (is being multiplied)
+        lea             r12, [rsp + r8 * 8]  ; second buffer (is being multiplied)
 
         mov             rsi, r9
         mov             rdi, r11  ; rdi points to the beginning of buffer1
@@ -68,22 +65,23 @@ mul_long_long:
         xor             r13, r13
 
         .loop:
-            clc
             ;  copy(from : buf1, to : buf2, length)
             mov             rsi, r11
             mov             rdi, r12
             mov             rcx, r8
             call            long_copy
 
-            ;  mul_long_short(buf2, [factor2 + offset * 8], length)
+            ;  mul_long_short(buf2, factor2[offset], length)
             mov             rdi, r12
             mov             rbx, [r10 + r13 * 8]
             mov             rcx, r8
             call            mul_long_short
+
 ;  carry  -- r14
+
             mov             r14, rsi
 
-            ;  add_long_long(factor1 + offset * 8, buf2, length)
+            ;  add_long_long([factor1 + offset * 8], buf2, length)
             lea             rdi, [r9 + r13 * 8]
             mov             rsi, r12
             mov             rcx, r8
@@ -91,7 +89,7 @@ mul_long_long:
             ;  save the carry bit from addition
             adc             r14, 0
 
-            ;  if (carry != 0) add_long_short(factor1 + 8 * (offset + length), carry, length - offset)
+            ;  if (carry != 0) add_long_short([factor1 + 8 * (offset + length)], carry, length - offset)
             test            r14, r14
             jz              .no_carry
                 lea             rdi, [r9 + 8 * r13]
@@ -121,11 +119,7 @@ mul_long_long:
 ;    rcx -- length of long number in qwords
 long_copy:
                 push            rcx
-                push            rdi
-                push            rsi
                 rep movsq
-                pop             rsi
-                pop             rdi
                 pop             rcx
                 ret
 
@@ -417,6 +411,8 @@ print_string:
 
 
                 section         .rodata
+
+long_size:      equ             128
 invalid_char_msg:
                 db              "Invalid character: "
 invalid_char_msg_size: equ             $ - invalid_char_msg
