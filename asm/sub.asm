@@ -4,13 +4,13 @@
 _start:
 
                 sub             rsp, 2 * 128 * 8  ; two chuncks with 128 portions of 8 bytes
-                lea             rdi, [rsp + 128 * 8]
                 mov             rcx, 128
+                lea             rdi, [rsp + rcx * 8]
                 call            read_long
                 mov             rdi, rsp
                 call            read_long
-                lea             rsi, [rsp + 128 * 8]
-                call            negate_long     ; new
+                lea             rsi, [rsp + rcx * 8]
+                call            negate_long  ; new
                 call            add_long_long
 
                 call            write_long
@@ -30,10 +30,7 @@ negate_long:
                 push            rdi
                 push            rcx
 .loop:
-;                not             [rdi] i don't know how to specify the size of operation
-                mov             rax, [rdi]
-                not             rax
-                mov             [rdi], rax
+                not             QWORD [rdi]
                 lea             rdi, [rdi + 8]
                 dec             rcx
                 jnz             .loop
