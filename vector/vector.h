@@ -3,6 +3,7 @@
 
 #include <cstddef>
 #include <utility>
+#include <cassert>
 
 template <typename T>
 struct vector
@@ -78,6 +79,7 @@ void vector<T>::delete_buffer(T *buff, size_t len) {
 
 template<typename T>
 T* vector<T>::new_buffer(size_t new_capacity) const {
+  assert(new_capacity >= size_);
   T* new_space = new_capacity == 0 ?
           nullptr : static_cast<T*>(operator new(sizeof(T) * new_capacity));
   size_t i = 0;
@@ -204,9 +206,7 @@ size_t vector<T>::capacity() const {
 
 template<typename T>
 void vector<T>::reserve(size_t demanded_capacity) {
-  if (demanded_capacity > capacity_) {
-    replace_buffer(demanded_capacity);
-  }
+  ensure_capacity(demanded_capacity);
 }
 
 template<typename T>
