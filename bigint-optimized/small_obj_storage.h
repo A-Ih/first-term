@@ -12,7 +12,8 @@
 template<typename T>
 struct small_obj_storage {
 
-  static_assert(std::is_trivial<T>::value, "Non-trivial types are not allowed");
+  static_assert(std::is_trivial<T>::value && std::is_trivially_destructible<T>::value,
+  "Only trivially-destructible trivial types are allowed");
 
   small_obj_storage() = default;
   small_obj_storage(const small_obj_storage &other);
